@@ -26,7 +26,7 @@ namespace EmailPinger
                 SmtpClient SmtpServer = new SmtpClient
                 {
                     Host = ConfigurationManager.AppSettings["EmailHost"],
-                    Port = 587,
+                    Port = int.Parse(ConfigurationManager.AppSettings["Host"]),
                     Credentials = new System.Net.NetworkCredential(ConfigurationManager.AppSettings["EmailAddress"], ConfigurationManager.AppSettings["EmailPassword"]),
                     DeliveryMethod = SmtpDeliveryMethod.Network,
                     EnableSsl = true
