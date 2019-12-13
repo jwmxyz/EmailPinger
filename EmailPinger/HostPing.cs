@@ -2,17 +2,42 @@
 using System;
 using System.Net.Mail;
 using System.Configuration;
+using EmailPinger.Models;
+using System.IO;
 
 namespace EmailPinger
 {
     public class HostPing
     {
-        public static void Main(string[] args)
+        public static readonly string FilePath = $@"{Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)}\results.wiz";
+
+        public static void Main()
         {
-            if (!PingHost(ConfigurationManager.AppSettings["Host"]))
+            var pingResult = PingHost(ConfigurationManager.AppSettings["Host"]);
+            // Send an email if the host could not be pinged.
+            if (!pingResult.Success)
             { 
                 SendEmail();
             }
+            WriteToFile(pingResult);
+        }
+
+        /// <summary>
+        /// Used to write the error message to file
+        /// </summary>
+        /// <param name="message">the message that we want to send to file.</param>
+        private static void WriteToFile(string message)
+        {
+            File.AppendAllLines(FilePath, new[] { message });
+        }
+
+        /// <summary>
+        /// Used to write the ping result to file.
+        /// </summary>
+        /// <param name="result">The result object that we want to send to file.</param>
+        private static void WriteToFile(PingResult result)
+        {
+            File.AppendAllLines(FilePath, new[] { result.ToString() });
         }
 
         /// <summary>
@@ -26,7 +51,7 @@ namespace EmailPinger
                 SmtpClient SmtpServer = new SmtpClient
                 {
                     Host = ConfigurationManager.AppSettings["EmailHost"],
-                    Port = int.Parse(ConfigurationManager.AppSettings["Host"]),
+                    Port = int.Parse(ConfigurationManager.AppSettings["Port"]),
                     Credentials = new System.Net.NetworkCredential(ConfigurationManager.AppSettings["EmailAddress"], ConfigurationManager.AppSettings["EmailPassword"]),
                     DeliveryMethod = SmtpDeliveryMethod.Network,
                     EnableSsl = true
@@ -35,15 +60,16 @@ namespace EmailPinger
                 mail.From = new MailAddress(ConfigurationManager.AppSettings["EmailAddress"]);
                 mail.To.Add(ConfigurationManager.AppSettings["EmailTo"]);
                 mail.Subject = ConfigurationManager.AppSettings["Subject"];
-                mail.Body = ConfigurationManager.AppSettings["Message"];
+                mail.Body = string.Format(ConfigurationManager.AppSettings["Message"], ConfigurationManager.AppSettings["Host"]);
                 mail.BodyEncoding = System.Text.Encoding.UTF8;
                 mail.SubjectEncoding = System.Text.Encoding.Default;
                 mail.IsBodyHtml = true;
 
                 SmtpServer.Send(mail);
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                WriteToFile($@"{{ Error: { e.ToString() } }},");
             }
         }
 
@@ -52,20 +78,20 @@ namespace EmailPinger
         /// </summary>
         /// <param name="host">The host that we want to ping</param>
         /// <returns>True if the ping works; false otherwise.</returns>
-        private static bool PingHost(string host)
+        private static PingResult PingHost(string host)
         {
-            bool pingable = false;
             Ping pinger = null;
-
+            PingResult pingResult = null;
             try
             {
                 pinger = new Ping();
-                PingReply reply = pinger.Send(host);
-                pingable = reply.Status == IPStatus.Success;
+                //replace new Uri(host).Host with "host" if pinging an ip address.
+                PingReply reply = pinger.Send(new Uri(host).Host);
+                pingResult = new PingResult(reply.Status == IPStatus.Success, reply.RoundtripTime);
             }
-            catch (PingException)
+            catch (PingException e)
             {
-                return false;
+                return new PingResult(false, 0);
             }
             finally
             {
@@ -75,7 +101,7 @@ namespace EmailPinger
                 }
             }
 
-            return pingable;
+            return pingResult;
         }
     }
 }
