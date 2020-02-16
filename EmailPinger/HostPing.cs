@@ -4,22 +4,49 @@ using System.Net.Mail;
 using System.Configuration;
 using EmailPinger.Models;
 using System.IO;
+using System.Net.Http;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace EmailPinger
 {
     public class HostPing
     {
-        public static readonly string FilePath = $@"{Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)}\results.wiz";
+        private static readonly string FilePath = $@"{Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)}\results.wiz";
+        private static readonly HttpClient _client = new HttpClient();
 
         public static void Main()
         {
+            //if the CheckApi is a bool and true then check the API.
+            if (bool.TryParse(ConfigurationManager.AppSettings["checkApi"], out bool checkApi))
+            {
+                if (checkApi)
+                {
+                    var response = _client.GetAsync(ConfigurationManager.AppSettings["apiCheckUrl"]).Result;
+                    if (response.StatusCode == System.Net.HttpStatusCode.OK)
+                    {
+                        var result = JsonConvert.DeserializeObject<Dictionary<string, string>>(response.Content.ReadAsStringAsync().Result);
+                        if (result.ContainsKey("value"))
+                        {
+                            if (bool.TryParse(result["value"], out bool returnedBool))
+                            {
+                                if (!returnedBool)
+                                {
+                                    Environment.Exit(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             var pingResult = PingHost(ConfigurationManager.AppSettings["Host"]);
             // Send an email if the host could not be pinged.
             if (!pingResult.Success)
-            { 
+            {
                 SendEmail();
             }
-            WriteToFile(pingResult);
         }
 
         /// <summary>
